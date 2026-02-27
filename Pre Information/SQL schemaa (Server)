@@ -1,0 +1,277 @@
+-- CyberSecurity Threat Intelligence Platform Management System
+-- Group: Cyber Strickers
+--   Muhammad Umair Amjad  
+-- Phase 1 – SQL DDL Script
+-- ----------------------------------------------------------------
+
+
+-- 1. ThreatActors
+--    Independent entity - no foreign keys
+
+
+CREATE TABLE ThreatActors (
+    actor_id    INT IDENTITY(1,1)    NOT NULL,
+    name        VARCHAR(255)         NOT NULL,
+    alias       VARCHAR(255)         NULL,
+    group_name  VARCHAR(255)         NULL,
+    motivation  VARCHAR(255)         NULL,
+    country     VARCHAR(100)         NULL,
+    first_seen  DATE                 NULL,
+    last_seen   DATE                 NULL,
+    risk_level  VARCHAR(50)          NULL,
+    description VARCHAR(M            NULL,
+    created_at  DATETIME      DEFAULT GETDATE() NOT NULL,
+
+    CONSTRAINT PK_ThreatActors        PRIMARY KEY (actor_id),
+    CONSTRAINT CHK_Actor_RiskLevel    CHECK (risk_level IN ('Critical','High','Medium','Low')),
+    CONSTRAINT CHK_Actor_DateOrder    CHECK (last_seen IS NULL OR first_seen IS NULL OR last_seen >= first_seen),
+    CONSTRAINT UQ_Actor_Name          UNIQUE (name)
+);
+
+-- 2. ThreatFeeds
+--    Independent entity - no foreign keys
+
+
+CREATE TABLE ThreatFeeds (
+    feed_id           INT           IDENTITY(1,1)     NOT NULL,
+    name              NVARCHAR(255)                   NOT NULL,
+    provider          NVARCHAR(255)                   NOT NULL,
+    api_url           NVARCHAR(500)                       NULL,
+    update_frequency  NVARCHAR(100)                       NULL,
+    format            NVARCHAR(100)                       NULL,
+    reliability_score DECIMAL(3,2)  DEFAULT 0.50          NULL,
+    last_updated      DATETIME                            NULL,
+
+    CONSTRAINT PK_ThreatFeeds             PRIMARY KEY (feed_id),
+    CONSTRAINT UQ_ThreatFeeds_Name        UNIQUE (name),
+    CONSTRAINT CHK_Feed_ReliabilityScore  CHECK (reliability_score BETWEEN 0.00 AND 1.00),
+    CONSTRAINT CHK_Feed_Format            CHECK (format IN ('STIX','JSON','XML','CSV','MISP','Other') OR format IS NULL)
+);
+
+
+-- 3. TTPs  (Tactics, Techniques and Procedures)
+--    Independent entity - no foreign keys
+
+
+
+CREATE TABLE TTPs (
+    ttp_id          INT           IDENTITY(1,1) NOT NULL,
+    name            NVARCHAR(255)               NOT NULL,
+    mitre_attack_id NVARCHAR(50)                    NULL,
+    tactic          NVARCHAR(255)               NOT NULL,
+    technique       NVARCHAR(255)               NOT NULL,
+    sub_technique   NVARCHAR(255)                   NULL,
+    severity        NVARCHAR(50)                NOT NULL,
+    description     NVARCHAR(MAX)                   NULL,
+
+    CONSTRAINT PK_TTPs           PRIMARY KEY (ttp_id),
+    CONSTRAINT UQ_TTPs_MITRE     UNIQUE (mitre_attack_id),
+    CONSTRAINT CHK_TTP_Severity  CHECK (severity IN ('Critical','High','Medium','Low'))
+);
+
+
+-- 4. Indicators  (IOCs)
+--    FK -> ThreatFeeds
+
+
+
+CREATE TABLE Indicators (
+    ioc_id           INT           IDENTITY(1,1) NOT NULL,
+    type             NVARCHAR(50)                NOT NULL,
+    value            NVARCHAR(500)               NOT NULL,
+    confidence_score DECIMAL(3,2)  DEFAULT 0.50      NULL,
+    first_seen       DATETIME                        NULL,
+    last_seen        DATETIME                        NULL,
+    is_active        BIT           DEFAULT 1     NOT NULL,
+    feed_id          INT                             NULL,
+
+    CONSTRAINT PK_Indicators             PRIMARY KEY (ioc_id),
+    CONSTRAINT FK_Indicators_ThreatFeeds FOREIGN KEY (feed_id)
+        REFERENCES ThreatFeeds(feed_id) ON DELETE SET NULL,
+    CONSTRAINT CHK_IOC_Type              CHECK (type IN ('IP','Domain','Hash','URL','Email','Filename')),
+    CONSTRAINT CHK_IOC_ConfScore         CHECK (confidence_score BETWEEN 0.00 AND 1.00),
+    CONSTRAINT CHK_IOC_DateOrder         CHECK (last_seen IS NULL OR first_seen IS NULL OR last_seen >= first_seen),
+    CONSTRAINT UQ_Indicators_Value       UNIQUE (type, value)
+);
+
+
+-- 5. Campaigns
+--    FK -> ThreatActors
+
+
+
+CREATE TABLE Campaigns (
+    campaign_id INT           IDENTITY(1,1)        NOT NULL,
+    name        NVARCHAR(255)                      NOT NULL,
+    start_date  DATE                                   NULL,
+    end_date    DATE                                   NULL,
+    objective   NVARCHAR(MAX)                          NULL,
+    status      NVARCHAR(100) DEFAULT 'Active'     NOT NULL,
+    actor_id    INT                                    NULL,
+
+    CONSTRAINT PK_Campaigns              PRIMARY KEY (campaign_id),
+    CONSTRAINT FK_Campaigns_ThreatActors FOREIGN KEY (actor_id)
+        REFERENCES ThreatActors(actor_id) ON DELETE SET NULL,
+    CONSTRAINT CHK_Campaign_Status       CHECK (status IN ('Active','Inactive','Closed','Under Investigation')),
+    CONSTRAINT CHK_Campaign_DateOrder    CHECK (end_date IS NULL OR start_date IS NULL OR end_date >= start_date),
+    CONSTRAINT UQ_Campaign_Name          UNIQUE (name)
+);
+
+
+
+-- 6. Users
+--    Independent entity - no foreign keys
+
+
+
+CREATE TABLE Users (
+    user_id       INT           IDENTITY(1,1)     NOT NULL,
+    username      NVARCHAR(100)                   NOT NULL,
+    password_hash NVARCHAR(255)                   NOT NULL,
+    email         NVARCHAR(255)                   NOT NULL,
+    role          NVARCHAR(50)                    NOT NULL,
+    created_at    DATETIME      DEFAULT GETDATE() NOT NULL,
+    last_login    DATETIME                            NULL,
+    is_active     BIT           DEFAULT 1         NOT NULL,
+
+    CONSTRAINT PK_Users          PRIMARY KEY (user_id),
+    CONSTRAINT UQ_Users_Username UNIQUE (username),
+    CONSTRAINT UQ_Users_Email    UNIQUE (email),
+    CONSTRAINT CHK_Users_Role    CHECK (role IN ('Admin','Analyst','Manager')),
+    CONSTRAINT CHK_Users_Email   CHECK (email LIKE '%_@__%.__%')
+);
+
+
+-- 7. Vulnerabilities
+--    Independent entity - no foreign keys
+
+
+
+CREATE TABLE Vulnerabilities (
+    vuln_id           INT           IDENTITY(1,1) NOT NULL,
+    cve_id            NVARCHAR(50)                    NULL,
+    description       NVARCHAR(MAX)               NOT NULL,
+    cvss_score        DECIMAL(4,2)                    NULL,
+    published_date    DATE                            NULL,
+    patch_available   BIT           DEFAULT 0     NOT NULL,
+    affected_products NVARCHAR(MAX)                   NULL,
+    exploit_available BIT           DEFAULT 0     NOT NULL,
+
+    CONSTRAINT PK_Vulnerabilities     PRIMARY KEY (vuln_id),
+    CONSTRAINT UQ_Vulnerabilities_CVE UNIQUE (cve_id),
+    CONSTRAINT CHK_Vuln_CVSS          CHECK (cvss_score BETWEEN 0.0 AND 10.0)
+);
+
+
+-- 8. Incidents
+--    FK -> Campaigns, FK -> Users
+
+
+
+CREATE TABLE Incidents (
+    incident_id      INT           IDENTITY(1,1)     NOT NULL,
+    title            NVARCHAR(255)                   NOT NULL,
+    description      NVARCHAR(MAX)                       NULL,
+    date_detected    DATETIME                        NOT NULL,
+    severity         NVARCHAR(50)                    NOT NULL,
+    status           NVARCHAR(100) DEFAULT 'Open'    NOT NULL,
+    affected_systems NVARCHAR(MAX)                       NULL,
+    campaign_id      INT                                 NULL,
+    reported_by      INT                                 NULL,
+
+    CONSTRAINT PK_Incidents           PRIMARY KEY (incident_id),
+    CONSTRAINT FK_Incidents_Campaigns FOREIGN KEY (campaign_id)
+        REFERENCES Campaigns(campaign_id) ON DELETE SET NULL,
+    CONSTRAINT FK_Incidents_Users     FOREIGN KEY (reported_by)
+        REFERENCES Users(user_id)         ON DELETE SET NULL,
+    CONSTRAINT CHK_Incident_Severity  CHECK (severity IN ('Critical','High','Medium','Low')),
+    CONSTRAINT CHK_Incident_Status    CHECK (status IN ('Open','Investigating','Contained','Resolved','Closed'))
+);
+
+
+
+-- 9. Reports
+--    FK -> Users, FK -> Incidents
+
+
+
+CREATE TABLE Reports (
+    report_id      INT           IDENTITY(1,1)     NOT NULL,
+    title          NVARCHAR(255)                   NOT NULL,
+    summary        NVARCHAR(MAX)                       NULL,
+    classification NVARCHAR(50)                    NOT NULL,
+    created_at     DATETIME      DEFAULT GETDATE() NOT NULL,
+    author_id      INT                                 NULL,
+    incident_id    INT                                 NULL,
+
+    CONSTRAINT PK_Reports           PRIMARY KEY (report_id),
+    CONSTRAINT FK_Reports_Users     FOREIGN KEY (author_id)
+        REFERENCES Users(user_id)        ON DELETE SET NULL,
+    CONSTRAINT FK_Reports_Incidents FOREIGN KEY (incident_id)
+        REFERENCES Incidents(incident_id) ON DELETE SET NULL,
+    CONSTRAINT CHK_Reports_Class    CHECK (classification IN ('TLP Red','TLP Amber','TLP Green','TLP White'))
+);
+
+
+-- JUNCTION / BRIDGE TABLES  (Many-to-Many Relationships)
+-- J1. Actor_TTP  -  ThreatActors <-> TTPs
+
+
+
+CREATE TABLE Actor_TTP (
+    actor_id INT NOT NULL,
+    ttp_id   INT NOT NULL,
+
+    CONSTRAINT PK_Actor_TTP      PRIMARY KEY (actor_id, ttp_id),
+    CONSTRAINT FK_ActorTTP_Actor FOREIGN KEY (actor_id)
+        REFERENCES ThreatActors(actor_id) ON DELETE CASCADE,
+    CONSTRAINT FK_ActorTTP_TTP   FOREIGN KEY (ttp_id)
+        REFERENCES TTPs(ttp_id)           ON DELETE CASCADE
+);
+
+
+-- J2. Campaign_IOC  -  Campaigns <-> Indicators
+
+
+CREATE TABLE Campaign_IOC (
+    campaign_id INT NOT NULL,
+    ioc_id      INT NOT NULL,
+
+    CONSTRAINT PK_Campaign_IOC         PRIMARY KEY (campaign_id, ioc_id),
+    CONSTRAINT FK_CampaignIOC_Campaign FOREIGN KEY (campaign_id)
+        REFERENCES Campaigns(campaign_id) ON DELETE CASCADE,
+    CONSTRAINT FK_CampaignIOC_IOC      FOREIGN KEY (ioc_id)
+        REFERENCES Indicators(ioc_id)     ON DELETE CASCADE
+);
+
+
+-- J3. Incident_IOC  -  Incidents <-> Indicators
+
+
+
+CREATE TABLE Incident_IOC (
+    incident_id INT NOT NULL,
+    ioc_id      INT NOT NULL,
+
+    CONSTRAINT PK_Incident_IOC         PRIMARY KEY (incident_id, ioc_id),
+    CONSTRAINT FK_IncidentIOC_Incident FOREIGN KEY (incident_id)
+        REFERENCES Incidents(incident_id) ON DELETE CASCADE,
+    CONSTRAINT FK_IncidentIOC_IOC      FOREIGN KEY (ioc_id)
+        REFERENCES Indicators(ioc_id)     ON DELETE CASCADE
+);
+
+
+-- J4. Incident_Vulnerability  -  Incidents <-> Vulnerabilities
+
+
+
+CREATE TABLE Incident_Vulnerability (
+    incident_id INT NOT NULL,
+    vuln_id     INT NOT NULL,
+
+    CONSTRAINT PK_Incident_Vulnerability     PRIMARY KEY (incident_id, vuln_id),
+    CONSTRAINT FK_IncidentVuln_Incident      FOREIGN KEY (incident_id)
+        REFERENCES Incidents(incident_id)     ON DELETE CASCADE,
+    CONSTRAINT FK_IncidentVuln_Vulnerability FOREIGN KEY (vuln_id)
+        REFERENCES Vulnerabilities(vuln_id)   ON DELETE CASCADE
+);
